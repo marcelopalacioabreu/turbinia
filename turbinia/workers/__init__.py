@@ -121,8 +121,11 @@ class TurbiniaTaskResult(object):
       return
     self.successful = success
     self.run_time = datetime.now() - self.start_time
-    if not status:
+    if not status and self.successful:
       status = 'Completed successfully in {0:s} on {1:s}'.format(
+          str(self.run_time), self.worker_name)
+    elif not status and not self.successful:
+      status = 'Completed unsuccessfully in {0:s} on {1:s}'.format(
           str(self.run_time), self.worker_name)
     self.log(status)
     self.status = status
@@ -252,7 +255,7 @@ class TurbiniaTask(object):
 
   def execute(
       self, cmd, result, save_files=None, new_evidence=None, close=False,
-      shell=False):
+      shell=False, success_codes=None):
     """Executes a given binary and saves output.
 
     Args:
@@ -264,12 +267,14 @@ class TurbiniaTask(object):
           If the task is successful, they will be added to the result.
       close (bool): Whether to close out the result.
       shell (bool): Whether the cmd is in the form of a string or a list.
+      success_codes (list(int)): Which return codes are considered successful.
 
     Returns:
       Tuple of the return code, and the TurbiniaTaskResult object
     """
     save_files = save_files if save_files else []
     new_evidence = new_evidence if new_evidence else []
+    success_codes = success_codes if success_codes else [0]
     if shell:
       proc = subprocess.Popen(cmd, shell=True)
     else:
@@ -279,12 +284,13 @@ class TurbiniaTask(object):
     result.error['stderr'] = stderr
     ret = proc.returncode
 
-    if ret:
-      msg = 'Execution failed with status {0:d}'.format(ret)
+    if ret not in success_codes:
+      msg = 'Execution of [{0!s}] failed with status {1:d}'.format(cmd, ret)
       result.log(msg)
       if close:
         result.close(self, success=False, status=msg)
     else:
+      result.log('Execution of [{0!s}] succeeded'.format(cmd))
       for file_ in save_files:
         result.log('Output file at {0:s}'.format(file_))
         if not self.run_local:
